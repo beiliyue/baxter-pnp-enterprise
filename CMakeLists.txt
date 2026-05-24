@@ -30,6 +30,8 @@ find_package(catkin REQUIRED COMPONENTS
   diagnostic_updater
   dynamic_reconfigure
   nodelet
+  cv_bridge
+  image_transport
   baxter_core_msgs
   baxter_interface
   baxter_maintenance_msgs
@@ -64,7 +66,7 @@ catkin_package(
   CATKIN_DEPENDS
     roscpp std_msgs geometry_msgs sensor_msgs trajectory_msgs
     control_msgs actionlib actionlib_msgs tf tf2 tf2_ros
-    diagnostic_updater dynamic_reconfigure nodelet
+    diagnostic_updater dynamic_reconfigure nodelet cv_bridge image_transport
     baxter_core_msgs baxter_interface baxter_maintenance_msgs
   DEPENDS behaviortree_cpp_v4
 )
@@ -126,7 +128,21 @@ target_link_libraries(pnp_main
 add_dependencies(pnp_main ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Nodelet plugin (zero-copy camera transport for process isolation)
+#  Executable: perception_node
+#  Deep-learning inference in a SEPARATE process
+#  Process isolation: crash here ≠ crash pnp_main
+# ═══════════════════════════════════════════════════════════════════════════
+add_executable(perception_node
+  src/perception_node.cpp
+)
+target_link_libraries(perception_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(perception_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Nodelet plugin (zero-copy camera transport)
+#  Load into pnp_main's nodelet manager
 # ═══════════════════════════════════════════════════════════════════════════
 add_library(baxter_pnp_nodelet
   src/camera_nodelet.cpp
@@ -134,8 +150,24 @@ add_library(baxter_pnp_nodelet
 target_link_libraries(baxter_pnp_nodelet
   ${catkin_LIBRARIES}
 )
-# Register nodelet plugin (generates nodelet_plugins.xml)
 add_dependencies(baxter_pnp_nodelet ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+# Generate nodelet_plugins.xml for pluginlib
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/nodelet_plugins.xml
+  "<library path=\"lib/libbaxter_pnp_nodelet\">\n"
+  "  <class name=\"baxter_pnp/CameraNodelet\"\n"
+  "         type=\"baxter_pnp::CameraNodelet\"\n"
+  "         base_class_type=\"nodelet::Nodelet\">\n"
+  "    <description>Zero-copy camera transport for Baxter PnP</description>\n"
+  "  </class>\n"
+  "</library>\n"
+)
+
+# Install nodelet_plugins.xml
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/nodelet_plugins.xml
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
 
 # ── Install ──────────────────────────────────────────────────────────────
 install(
@@ -143,6 +175,7 @@ install(
     baxter_pnp_hardware
     baxter_pnp_bt_nodes
     baxter_pnp_nodelet
+    perception_node
     pnp_main
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

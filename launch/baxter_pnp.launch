@@ -26,6 +26,8 @@
   <arg name="record"           default="false"/>
   <arg name="bt_xml"           default="$(find baxter_pnp_enterprise)/bt_xml/baxter_pnp_bt.xml"/>
   <arg name="sim"              default="false"/>
+  <arg name="run_perception"   default="true"/>
+  <arg name="model_path"       default="$(find baxter_pnp_enterprise)/models/grconvnet.pt"/>
 
   <!-- ── PnP Main Node ──────────────────────────────────────────────── -->
   <node name="baxter_pnp_main" pkg="baxter_pnp_enterprise" type="pnp_main"
@@ -52,16 +54,41 @@
 
   </node>
 
-  <!-- ── Nodelet for camera (zero-copy transport) ─────────────────── -->
+  <!-- ── Perception Node (独立进程 — 深度学习推理) ────────────── -->
   <!--
-  进程隔离: 视觉处理在单独的nodelet中运行，崩溃不影响运动控制。
-  如果 camera_nodelet 崩溃，pnp_main 仍然可以运行（只是检测不到物体）。
+  进程隔离: perception_node 是一个独立ROS进程。
+  如果深度学习模型崩溃（OOM/段错误），不会影响 pnp_main 的运动控制。
+  Baxter 停在安全位置，不会伤人。
+  
+  通信方式（替代原始numpy IPC）:
+    perception_node  → pub /baxter_pnp/grasp_pose  (PoseStamped)
+    perception_node  ← sub /baxter_pnp/grasp_request (Bool)
+    perception_node  ← sub /camera/rgb/image_raw    (Image, BEST_EFFORT)
+  
+  原始Python代码 (pnp.py:93-99) 使用numpy文件:
+    np.save(grasp_request, 1)       → 现在: pub /baxter_pnp/grasp_request
+    while not np.load(grasp_avail)  → 现在: DetectObject订阅 /baxter_pnp/grasp_pose
+    grasp_pose = np.load(grasp_pose) → 现在: topic消息直接写入Blackboard
+  -->
+  <group if="$(arg run_perception)">
+    <node name="baxter_perception" pkg="baxter_pnp_enterprise" type="perception_node"
+          output="screen" required="false">  <!-- required=false: 感知崩溃不影响主控制 -->
+      <param name="model_path"  value="$(arg model_path)"/>
+      <param name="image_topic" value="/camera/rgb/image_raw"/>
+      <param name="grasp_pub_topic" value="/baxter_pnp/grasp_pose"/>
+    </node>
+  </group>
+
+  <!-- ── Nodelet: 零拷贝相机传输 (可选) ────────────────────────── -->
+  <!--
+  在 pnp_main 进程内加载 camera_nodelet，图像数据零拷贝。
+  但牺牲了进程隔离性 —— camera_nodelet 崩溃会带走 pnp_main。
   
   取消注释以启用:
   <node name="camera_nodelet_manager" pkg="nodelet" type="nodelet"
         args="manager" output="screen"/>
   <node name="camera_nodelet" pkg="nodelet" type="nodelet"
-        args="load baxter_pnp_enterprise/CameraNodelet camera_nodelet_manager"
+        args="load baxter_pnp_enterprise/baxter_pnp/CameraNodelet camera_nodelet_manager"
         output="screen"/>
   -->
 
