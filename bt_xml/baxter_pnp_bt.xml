@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+
+<!--
+╔══════════════════════════════════════════════════════════════════════════╗
+║  Baxter Pick-and-Place Behavior Tree (BehaviorTree.CPP v4)             ║
+║  Decision Layer                                                        ║
+║                                                                        ║
+║  流程: DetectObject → PlanPath → MoveToPick → Grasp → MoveToPlace→Release║
+║  异常: Fallback + Retry×3 + AlarmTrigger                               ║
+╚══════════════════════════════════════════════════════════════════════════╝
+-->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="BaxterPnP">
+
+    <!--
+    Main Sequence — 所有步骤按顺序执行
+    任何一步 FAILURE 都会终止整个 Sequence（安全行为）
+    -->
+    <Sequence name="MainPnPSequence">
+
+      <!-- Step 1: 检查机器人使能状态 -->
+      <BaxterEnabled name="CheckRobotEnabled"/>
+
+      <!-- Step 2: 等待视觉检测到物体 -->
+      <DetectObject name="WaitForGraspDetection"/>
+
+      <!-- Step 3: IK路径规划（后台线程异步求解） -->
+      <PlanPath name="ComputeIK"/>
+
+      <!--
+      Step 4: 抓取（带重试机制）
+
+      架构: Fallback
+              ├── Retry×3 (尝试抓取3次)
+              │     └── Sequence (MoveToPick → Approach → Grasp → Verify)
+              └── AlarmTrigger (所有重试失败后报警)
+      -->
+      <Fallback name="GraspWithRetry">
+
+        <!-- 尝试1-3次抓取 -->
+        <Retry num_attempts="3" name="RetryGraspUpTo3Times">
+          <Sequence name="SingleGraspAttempt">
+
+            <!-- 4a: 移动到物体上方hover位置 -->
+            <!-- 对应Python: approach = copy.deepcopy(pose)
+                           approach.position.z += hover_distance
+                           self.robot.move_to(approach)
+                           (pnp.py:29-32) -->
+            <MoveToPick name="MoveArmAboveObject"
+                        target="{detected_pose}"
+                        hover="{hover_distance}"/>
+
+            <!-- 4b: 逐步下降接近，监控力传感器 -->
+            <!-- 对应Python: _approach(pose) (pnp.py:28-41) -->
+            <ApproachPose name="StepDownWithForceMonitor"
+                          target_pose="{detected_pose}"
+                          force_threshold="{force_threshold}"/>
+
+            <!-- 4c: 闭合夹爪 -->
+            <!-- 对应Python: self.robot.close_gripper() (robot.py:63) -->
+            <GraspObject name="CloseGripper"/>
+
+            <!-- 4d: 验证夹爪确实闭合（物体被抓取） -->
+            <GripperClosed name="VerifyGrasp"/>
+
+          </Sequence>
+        </Retry>
+
+        <!-- 所有重试失败 → 触发报警 -->
+        <AlarmTrigger name="AlertOperator"
+                      error_reason="Grasp failed after 3 attempts — check vision and gripper"/>
+
+      </Fallback>
+
+      <!-- Step 5: 抓取后抬臂 -->
+      <!-- 对应Python: _retract() (pnp.py:44-56) -->
+      <Retract name="LiftArmAfterGrasp"/>
+
+      <!-- Step 6: 移动到放置位置 -->
+      <MoveToPlace name="MoveToDropLocation"
+                   place_position="{place_position}"/>
+
+      <!-- Step 7: 放置前接近 -->
+      <ApproachPose name="StepDownForRelease"
+                    target_pose="{place_position}"
+                    force_threshold="{force_threshold}"/>
+
+      <!-- Step 8: 打开夹爪释放物体 -->
+      <ReleaseObject name="OpenGripperToRelease"/>
+
+      <!-- Step 9: 释放后抬臂 -->
+      <Retract name="LiftArmAfterRelease"/>
+
+      <!-- Step 10: 请求下一轮视觉检测 -->
+      <RequestGraspPose name="RequestNextGrasp"/>
+
+    </Sequence>
+
+  </BehaviorTree>
+
+  <!-- Blackboard 默认值（可在launch文件中覆盖） -->
+  <Blackboard>
+    <key name="force_threshold" value="-8.0" type="double"/>
+    <key name="hover_distance"  value="0.12" type="double"/>
+    <key name="step_size"       value="0.05" type="double"/>
+  </Blackboard>
+
+</root>

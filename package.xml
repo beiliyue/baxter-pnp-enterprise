@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>baxter_pnp_enterprise</name>
+  <version>1.0.0</version>
+  <description>
+    Enterprise-grade Baxter Pick-and-Place system based on BehaviorTree.CPP v4.
+    
+    Architecture (Three-Layer):
+      - Hardware Interface Layer : Baxter SDK wrapper with lifecycle management
+      - Skill Layer             : BehaviorTree.CPP Action / Condition nodes
+      - Decision Layer          : BT XML defining the PnP workflow
+    
+    Key enterprise features:
+      - Multi-threaded callback processing via ros::AsyncSpinner
+      - Thread-safe shared state with std::mutex / std::lock_guard
+      - Actionlib-based motion control (non-blocking)
+      - diagnostic_updater for hardware health monitoring
+      - dynamic_reconfigure for runtime parameter tuning
+      - Structured logging with rosconsole macros
+      - Graceful shutdown and error recovery
+    
+    Author  : Robotics Team
+    Maintainer: candidate@example.com
+  </description>
+  <maintainer email="candidate@example.com">Robotics Candidate</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>control_msgs</depend>
+  <depend>actionlib</depend>
+  <depend>actionlib_msgs</depend>
+  <depend>tf</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>diagnostic_updater</depend>
+  <depend>dynamic_reconfigure</depend>
+  <depend>nodelet</depend>
+
+  <!-- BehaviorTree.CPP v4 — install from source:
+       git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git
+       BehaviorTree.CPP v4 requires C++17
+  -->
+  <depend>behaviortree_cpp_v4</depend>
+
+  <!-- Baxter SDK (Rethink Robotics) -->
+  <depend>baxter_core_msgs</depend>
+  <depend>baxter_interface</depend>
+  <depend>baxter_maintenance_msgs</depend>
+
+  <export>
+    <nodelet plugin="${prefix}/nodelet_plugins.xml"/>
+  </export>
+</package>

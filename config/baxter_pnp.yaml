@@ -1,0 +1,20 @@
+# Baxter PnP Configuration Parameters
+# ======================================
+# 可通过 roslaunch 的 _param:=value 覆盖
+
+# 机器人配置
+limb: "right"
+
+# 力控接近参数（对应Python代码 pnp.py:10-15）
+force_threshold: -8.0   # 单位为牛顿，Z轴力阈值
+hover_distance: 0.12     # 单位为米，目标上方悬停高度
+step_size: 0.05          # 单位为米，接近步进
+
+# 放置位置（世界坐标系）
+place_x: 0.7
+place_y: -0.5
+place_z: -0.2
+
+# 执行器配置
+spinner_threads: 4       # AsyncSpinner 线程数
+bt_xml: ""               # BT XML 路径，为空则使用默认

@@ -1,0 +1,24 @@
+# Build
+build/
+devel/
+install/
+*.o
+*.so
+*.a
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ROS
+*.bag
+*.bag.active
+
+# BT trace
+bt_trace.fbl
+
+# OS
+.DS_Store
+Thumbs.db

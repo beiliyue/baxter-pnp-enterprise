@@ -1,0 +1,99 @@
+<launch>
+  <!--
+  Baxter PnP Enterprise Launch File
+  ==================================
+  用法:
+    roslaunch baxter_pnp_enterprise baxter_pnp.launch
+    
+  单机模式（Baxter真机）:
+    roslaunch baxter_pnp_enterprise baxter_pnp.launch \
+      limb:=right \
+      force_threshold:=-8.0
+
+  rosbag录制:
+    roslaunch baxter_pnp_enterprise baxter_pnp.launch record:=true
+  -->
+
+  <!-- ── Arguments ──────────────────────────────────────────────────── -->
+  <arg name="limb"             default="right"/>
+  <arg name="force_threshold"  default="-8.0"/>
+  <arg name="hover_distance"   default="0.12"/>
+  <arg name="step_size"        default="0.05"/>
+  <arg name="place_x"          default="0.7"/>
+  <arg name="place_y"          default="-0.5"/>
+  <arg name="place_z"          default="-0.2"/>
+  <arg name="spinner_threads"  default="4"/>
+  <arg name="record"           default="false"/>
+  <arg name="bt_xml"           default="$(find baxter_pnp_enterprise)/bt_xml/baxter_pnp_bt.xml"/>
+  <arg name="sim"              default="false"/>
+
+  <!-- ── PnP Main Node ──────────────────────────────────────────────── -->
+  <node name="baxter_pnp_main" pkg="baxter_pnp_enterprise" type="pnp_main"
+        output="screen" required="true">
+
+    <!-- Parameters (override via command line: _param:=value) -->
+    <param name="limb"            value="$(arg limb)"/>
+    <param name="force_threshold" value="$(arg force_threshold)"/>
+    <param name="hover_distance"  value="$(arg hover_distance)"/>
+    <param name="step_size"       value="$(arg step_size)"/>
+    <param name="place_x"         value="$(arg place_x)"/>
+    <param name="place_y"         value="$(arg place_y)"/>
+    <param name="place_z"         value="$(arg place_z)"/>
+    <param name="spinner_threads" value="$(arg spinner_threads)"/>
+    <param name="bt_xml"          value="$(arg bt_xml)"/>
+
+    <!-- Remap topics for Baxter robot -->
+    <remap from="/robot/joint_states"
+           to="/robot/joint_states"/>
+    <remap from="/robot/limb/right/joint_command"
+           to="/robot/limb/right/joint_command"/>
+    <remap from="/robot/end_effector/right/gripper_command"
+           to="/robot/end_effector/right/gripper_command"/>
+
+  </node>
+
+  <!-- ── Nodelet for camera (zero-copy transport) ─────────────────── -->
+  <!--
+  进程隔离: 视觉处理在单独的nodelet中运行，崩溃不影响运动控制。
+  如果 camera_nodelet 崩溃，pnp_main 仍然可以运行（只是检测不到物体）。
+  
+  取消注释以启用:
+  <node name="camera_nodelet_manager" pkg="nodelet" type="nodelet"
+        args="manager" output="screen"/>
+  <node name="camera_nodelet" pkg="nodelet" type="nodelet"
+        args="load baxter_pnp_enterprise/CameraNodelet camera_nodelet_manager"
+        output="screen"/>
+  -->
+
+  <!-- ── rosbag Recording (for offline fault analysis) ────────────── -->
+  <!--
+  录制所有关键topic，包括：
+    - /robot/joint_states    关节状态
+    - /robot/joint_command   控制命令
+    - /rosout                日志（包含PNP_EVENT标记）
+    - /diagnostics           诊断信息
+    - /tf                    坐标变换
+  
+  故障分析:
+    rosbag play recorded.bag /rosout:=/rosout_replay
+    rostopic echo /rosout_replay | grep PNP_EVENT
+    rostopic echo /rosout_replay | grep GraspFailure
+  -->
+  <group if="$(arg record)">
+    <node name="rosbag_record" pkg="rosbag" type="record"
+          args="record -a -o $(env HOME)/baxter_pnp_bags/">
+      <remap from="/rosout" to="/rosout"/>
+    </node>
+  </group>
+
+  <!-- ── Diagnostics ───────────────────────────────────────────────── -->
+  <node name="diagnostics_aggregator"
+        pkg="diagnostic_aggregator" type="diagnostic_aggregator"
+        output="screen"/>
+
+  <!-- ── RViz (for visualization) ──────────────────────────────────── -->
+  <node name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find baxter_pnp_enterprise)/config/baxter_pnp.rviz"
+        if="$(arg sim)"/>
+
+</launch>
